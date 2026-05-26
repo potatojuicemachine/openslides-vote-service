@@ -45,18 +45,24 @@ RUN apk add --no-cache \
 STOPSIGNAL SIGKILL
 CMD ["sleep", "inf"]
 
-# Production Image
+#base for use with local openslides-go
+FROM base AS base-gowork
+COPY ./lib ../lib
+COPY ./vote.work ../go.work
+
+#builder with local openslides-go
+FROM base-gowork AS builder-gowork
+RUN go build
 
 FROM base AS builder
 RUN go build
 
-FROM scratch AS prod
+#prepare production image
+FROM scratch AS pre-prod
 
 ## Setup
 ARG CONTEXT
 ENV APP_CONTEXT=prod
-
-COPY --from=builder /app/openslides-vote-service/openslides-vote-service /
 
 ## External Information
 LABEL org.opencontainers.image.title="OpenSlides Vote Service"
@@ -70,3 +76,13 @@ EXPOSE 9013
 ENTRYPOINT ["/openslides-vote-service"]
 
 HEALTHCHECK CMD ["/openslides-vote-service", "health"]
+
+#finalize prod build with local openslides-go
+FROM pre-prod AS prod-gowork
+
+COPY --from=builder-gowork /app/openslides-vote-service/openslides-vote-service /
+
+#finalize prod build
+FROM pre-prod AS prod
+
+COPY --from=builder /app/openslides-vote-service/openslides-vote-service /
