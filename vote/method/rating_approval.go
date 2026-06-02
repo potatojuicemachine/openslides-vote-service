@@ -41,7 +41,13 @@ func RatingApprovalFromRequest(config json.RawMessage) (*RatingApproval, error) 
 		AllowAbstain     dsfetch.Maybe[bool] `json:"allow_abstain"`
 	}
 	if err := json.Unmarshal(config, &cfg); err != nil {
-		return nil, invalidConfigError{}
+		return nil, invalidConfig("method_config has to be valid json")
+	}
+
+	valueMaxOption, setMaxOption := cfg.MaxOptionsAmount.Value()
+	valueMinOption, setMinOption := cfg.MinOptionsAmount.Value()
+	if setMaxOption && setMinOption && valueMinOption > valueMaxOption {
+		return nil, invalidConfig("value of min_options_amount has to be lower then max_options_amount")
 	}
 
 	allowAbstain, set := cfg.AllowAbstain.Value()

@@ -45,6 +45,12 @@ func SelectionFromRequest(config json.RawMessage) (*Selection, error) {
 		return nil, invalidConfigError{}
 	}
 
+	valueMaxOption, setMaxOption := cfg.MaxOptionsAmount.Value()
+	valueMinOption, setMinOption := cfg.MinOptionsAmount.Value()
+	if setMaxOption && setMinOption && valueMinOption > valueMaxOption {
+		return nil, invalidConfig("value of min_options_amount has to be lower then max_options_amount")
+	}
+
 	return &Selection{
 		MaxOptionsAmount: cfg.MaxOptionsAmount,
 		MinOptionsAmount: cfg.MinOptionsAmount,
