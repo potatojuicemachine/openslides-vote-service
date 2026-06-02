@@ -133,6 +133,7 @@ func (ra RatingApproval) ValidateBallot(vote json.RawMessage) error {
 func (ra RatingApproval) Result(votes []dsmodels.PollBallot) (string, error) {
 	result := make(map[string]map[string]decimal.Decimal)
 	invalid := 0
+	var abstain decimal.Decimal
 
 	for _, vote := range votes {
 		if err := ra.ValidateBallot(json.RawMessage(vote.Value)); err != nil {
@@ -151,6 +152,11 @@ func (ra RatingApproval) Result(votes []dsmodels.PollBallot) (string, error) {
 		var votedOptions map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(vote.Value), &votedOptions); err != nil {
 			return "", fmt.Errorf("invalid options `%s`: %w", vote.Value, err)
+		}
+
+		if len(votedOptions) == 0 {
+			abstain = abstain.Add(weight)
+			continue
 		}
 
 		for option, value := range votedOptions {
@@ -173,9 +179,30 @@ func (ra RatingApproval) Result(votes []dsmodels.PollBallot) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("encode result: %w", err)
 	}
-	withInvalid, err := addInvalid(encodedResult, invalid)
+	withInvalid, err := addInvalidAndAbstain(encodedResult, invalid, abstain)
 	if err != nil {
-		return "", fmt.Errorf("add invalid: %w", err)
+		return "", fmt.Errorf("add invalid and abstain: %w", err)
 	}
 	return string(withInvalid), nil
+}
+
+func addInvalidAndAbstain(result []byte, invalid int, abstain decimal.Decimal) ([]byte, error) {
+	if invalid == 0 && abstain.IsZero() {
+		return result, nil
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal(result, &data); err != nil {
+		return nil, err
+	}
+
+	if invalid != 0 {
+		data[keyInvalid] = invalid
+	}
+
+	if !abstain.IsZero() {
+		data[keyAbstain] = abstain
+	}
+
+	return json.Marshal(data)
 }

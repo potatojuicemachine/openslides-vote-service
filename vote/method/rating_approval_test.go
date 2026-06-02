@@ -13,34 +13,37 @@ import (
 func TestRatingApprovalValidateVote(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
-		method      string
 		config      string
 		options     []int
 		vote        string
 		expectValid bool
 	}{
 		{
-			name:        "Rating Approval",
-			method:      "rating_approval",
+			name:        "Normal",
 			config:      `{}`,
 			options:     []int{1, 2},
 			vote:        `{"1":"Yes", "2":"No"}`,
 			expectValid: true,
 		},
 		{
-			name:        "Rating Approval invalid key",
-			method:      "rating_approval",
+			name:        "Invalid key",
 			config:      `{}`,
 			options:     []int{1, 2},
 			vote:        `{"0":"Yes", "2":"No"}`,
 			expectValid: false,
 		},
 		{
-			name:        "Rating Approval disallow abstain",
-			method:      "rating_approval",
+			name:        "Disallow abstain",
 			config:      `{"allow_abstain":false}`,
 			options:     []int{1, 2},
 			vote:        `{"1":"Yes", "2":"Abstain"}`,
+			expectValid: false,
+		},
+		{
+			name:        "Invalid value",
+			config:      `{"allow_abstain":false}`,
+			options:     []int{1, 2},
+			vote:        `{"1":"Yes", "2":"invalid"}`,
 			expectValid: false,
 		},
 	} {
@@ -77,15 +80,13 @@ func TestRatingApprovalValidateVote(t *testing.T) {
 func TestRatingApprovalCreateResult(t *testing.T) {
 	for _, tt := range []struct {
 		name         string
-		method       string
 		config       string
 		options      []int
 		ballots      []dsmodels.PollBallot
 		expectResult string
 	}{
 		{
-			name:    "Rating Approval",
-			method:  "rating_approval",
+			name:    "Normal",
 			config:  `{}`,
 			options: []int{1, 2, 3},
 			ballots: []dsmodels.PollBallot{
@@ -96,8 +97,7 @@ func TestRatingApprovalCreateResult(t *testing.T) {
 			expectResult: `{"1":{"yes":"1"},"2":{"no":"1","yes":"1"},"3":{"no":"1","yes":"5"}}`,
 		},
 		{
-			name:    "Rating Approval with out abstain but with invalid",
-			method:  "rating_approval",
+			name:    "With out abstain but with invalid",
 			config:  `{"allow_abstain":false}`,
 			options: []int{1, 2, 3},
 			ballots: []dsmodels.PollBallot{
@@ -105,6 +105,39 @@ func TestRatingApprovalCreateResult(t *testing.T) {
 				{Value: `{"1":"yes","2":"no"}`},
 			},
 			expectResult: `{"1":{"yes":"1"},"2":{"no":"1"},"invalid":1}`,
+		},
+		{
+			name:    "General abstain",
+			config:  `{}`,
+			options: []int{1, 2, 3},
+			ballots: []dsmodels.PollBallot{
+				{Value: `{"1":"yes","2":"no"}`},
+				{Value: `{}`},
+			},
+			expectResult: `{"1":{"yes":"1"},"2":{"no":"1"},"abstain":"1"}`,
+		},
+		{
+			name: "General abstain but abstain not allowed",
+			// At the moment, to abstain and not vote for a option, is something different.
+			config:  `{"allow_abstain":false}`,
+			options: []int{1, 2, 3},
+			ballots: []dsmodels.PollBallot{
+				{Value: `{"1":"yes","2":"no"}`},
+				{Value: `{"1":"yes","2":"abstain"}`},
+				{Value: `{}`},
+			},
+			expectResult: `{"1":{"yes":"1"},"2":{"no":"1"},"abstain":"1","invalid":1}`,
+		},
+		{
+			name: "Not Voting does not count as abstain",
+			// At the moment, to abstain and not vote for a option, is something different.
+			config:  `{}`,
+			options: []int{1, 2, 3},
+			ballots: []dsmodels.PollBallot{
+				{Value: `{"1":"yes","2":"abstain"}`},
+				{Value: `{"1":"yes"}`},
+			},
+			expectResult: `{"1":{"yes":"2"},"2":{"abstain":"1"}}`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
