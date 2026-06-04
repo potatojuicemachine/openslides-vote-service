@@ -61,24 +61,24 @@ func methodFromString(methodStr string) (Method, error) {
 }
 
 const (
-	keyAbstain = "abstain"
-	keyNota    = "nota"
-	keyInvalid = "invalid"
+	keyAbstain      = "abstain"
+	keyNota         = "nota"
+	keyInvalid      = "invalid"
+	keyTotalBallots = "total_ballots"
 )
 
-var reservedOptionNames = []string{keyAbstain, keyNota, keyInvalid}
+var reservedOptionNames = []string{keyAbstain, keyNota, keyInvalid, keyTotalBallots}
 
-func addInvalid(result []byte, invalid int) ([]byte, error) {
-	if invalid == 0 {
-		return result, nil
-	}
-
+func addInvalidAndTotalBallots(result []byte, totalBallots, invalid int) ([]byte, error) {
 	var data map[string]any
 	if err := json.Unmarshal(result, &data); err != nil {
 		return nil, err
 	}
 
-	data[keyInvalid] = invalid
+	if invalid != 0 {
+		data[keyInvalid] = invalid
+	}
+	data[keyTotalBallots] = totalBallots
 
 	return json.Marshal(data)
 }
@@ -114,11 +114,12 @@ func iterateValues(
 		return "", fmt.Errorf("encode result: %w", err)
 	}
 
-	withInvalid, err := addInvalid(encodedResult, invalid)
+	withInvalidAndTotalBallots, err := addInvalidAndTotalBallots(encodedResult, len(votes), invalid)
 	if err != nil {
 		return "", fmt.Errorf("add invalid: %w", err)
 	}
-	return string(withInvalid), nil
+
+	return string(withInvalidAndTotalBallots), nil
 }
 
 func hasDuplicates[T comparable](slice []T) bool {

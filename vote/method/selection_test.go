@@ -140,7 +140,7 @@ func TestSelectionCreateResult(t *testing.T) {
 				{Value: `[2,3]`},
 				{Value: `[3]`, Weight: decimal.NewFromInt(5)},
 			},
-			expectResult: `{"1":"1","2":"2","3":"6"}`,
+			expectResult: `{"1":"1","2":"2","3":"6","total_ballots":3}`,
 		},
 		{
 			name:    "Selection abstain",
@@ -152,7 +152,7 @@ func TestSelectionCreateResult(t *testing.T) {
 				{Value: `[]`},
 				{Value: `[]`, Weight: decimal.NewFromInt(5)},
 			},
-			expectResult: `{"1":"1","2":"1","abstain":"6"}`,
+			expectResult: `{"1":"1","2":"1","abstain":"6","total_ballots":3}`,
 		},
 		{
 			name:    "Selection nota",
@@ -164,7 +164,7 @@ func TestSelectionCreateResult(t *testing.T) {
 				{Value: `"nota"`},
 				{Value: `"nota"`, Weight: decimal.NewFromInt(5)},
 			},
-			expectResult: `{"1":"1","2":"1","nota":"6"}`,
+			expectResult: `{"1":"1","2":"1","nota":"6","total_ballots":3}`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

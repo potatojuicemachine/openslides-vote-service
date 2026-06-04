@@ -232,12 +232,14 @@ Valid ballots look like: `{"value":"yes"}`, `{"value":"no"}` or
 
 The poll result looks like:
 
-`{"yes": "32", "no": "20", "abstain": "10", "invalid": 2}`
+`{"yes":"32","no":"20","abstain":"10","invalid":2,"total_ballots":64}`
 
 Attributes with a zero get discarded.
 
 The values are decimal values decoded as string. See [Vote
-Weight](#vote-weight).
+Weight](#vote-weight). Only the values of `invalid` and `total_ballots` are integers,
+since they are absolut numbers and not affected by bote weight. The field
+`total_ballots` is the number of ballots. It contains valid and invalid ballots.
 
 
 ### selection
@@ -281,7 +283,7 @@ means, that they disapprove all options.
 #### poll/result
 
 A result can look like this:
-`{"1":"40","2":"23","nota":"6","abstain":"7","invalid":3}`
+`{"1":"40","2":"23","nota":"6","abstain":"7","invalid":3,"total_ballots":80}`
 
 The keys of the json-object are option_ids as string.
 
@@ -335,7 +337,7 @@ An empty object means abstain: `{"value":{}}`
 #### poll/result
 
 A result can looks simular to a `selection`-result:
-`{"1":"40","2":"23",abstain":"7","invalid":3}`
+`{"1":"40","2":"23",abstain":"7","invalid":3,"total_ballots":60}`
 
 
 ### rating_approval
@@ -365,7 +367,7 @@ A ballot value looks like a combination between `rating_score` and `approval`:
 #### poll/result
 
 A `rating_approval` result looks like:
-`{"1":{"yes":"5","no":"1"},"2":{"yes":"1","abstain":"6"},"invalid":1}`
+`{"1":{"yes":"5","no":"1"},"2":{"yes":"1","abstain":"6"},"invalid":1,"total_ballots":7}`
 
 This means, that for the option with id `1`, there where 5 ballots with `Yes`,
 one ballot with `No` and no `abstain`. For the option with id `2`, there where

@@ -91,7 +91,7 @@ func TestApprovalCreateResult(t *testing.T) {
 				{Value: `"Yes"`},
 				{Value: `"No"`},
 			},
-			expectResult: `{"no":"1","yes":"2"}`,
+			expectResult: `{"no":"1","total_ballots":3,"yes":"2"}`,
 		},
 		{
 			name:   "Approval with invalid",
@@ -103,7 +103,7 @@ func TestApprovalCreateResult(t *testing.T) {
 				{Value: `"No"`},
 				{Value: `"ABC"`},
 			},
-			expectResult: `{"invalid":1,"no":"1","yes":"2"}`,
+			expectResult: `{"invalid":1,"no":"1","total_ballots":4,"yes":"2"}`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -188,7 +188,7 @@ func TestRatingScoreCreateResult(t *testing.T) {
 				{Value: `{"2":2,"3":3}`},
 				{Value: `{"3":5}`, Weight: decimal.NewFromInt(5)},
 			},
-			expectResult: `{"1":"3","2":"5","3":"28"}`,
+			expectResult: `{"1":"3","2":"5","3":"28","total_ballots":3}`,
 		},
 		{
 			name:    "Rating Score Abstain",
@@ -200,7 +200,7 @@ func TestRatingScoreCreateResult(t *testing.T) {
 				{Value: `{}`},
 				{Value: `{}`, Weight: decimal.NewFromInt(5)},
 			},
-			expectResult: `{"1":"3","2":"3","abstain":"6"}`,
+			expectResult: `{"1":"3","2":"3","abstain":"6","total_ballots":3}`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -179,18 +179,14 @@ func (ra RatingApproval) Result(votes []dsmodels.PollBallot) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("encode result: %w", err)
 	}
-	withInvalid, err := addInvalidAndAbstain(encodedResult, invalid, abstain)
+	withInvalid, err := addExtra(encodedResult, len(votes), invalid, abstain)
 	if err != nil {
 		return "", fmt.Errorf("add invalid and abstain: %w", err)
 	}
 	return string(withInvalid), nil
 }
 
-func addInvalidAndAbstain(result []byte, invalid int, abstain decimal.Decimal) ([]byte, error) {
-	if invalid == 0 && abstain.IsZero() {
-		return result, nil
-	}
-
+func addExtra(result []byte, totalBallots, invalid int, abstain decimal.Decimal) ([]byte, error) {
 	var data map[string]any
 	if err := json.Unmarshal(result, &data); err != nil {
 		return nil, err
@@ -203,6 +199,8 @@ func addInvalidAndAbstain(result []byte, invalid int, abstain decimal.Decimal) (
 	if !abstain.IsZero() {
 		data[keyAbstain] = abstain
 	}
+
+	data[keyTotalBallots] = totalBallots
 
 	return json.Marshal(data)
 }

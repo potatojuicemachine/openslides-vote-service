@@ -94,7 +94,7 @@ func TestRatingApprovalCreateResult(t *testing.T) {
 				{Value: `{"2":"yes","3":"no"}`},
 				{Value: `{"3":"yes"}`, Weight: decimal.NewFromInt(5)},
 			},
-			expectResult: `{"1":{"yes":"1"},"2":{"no":"1","yes":"1"},"3":{"no":"1","yes":"5"}}`,
+			expectResult: `{"1":{"yes":"1"},"2":{"no":"1","yes":"1"},"3":{"no":"1","yes":"5"},"total_ballots":3}`,
 		},
 		{
 			name:    "With out abstain but with invalid",
@@ -104,7 +104,7 @@ func TestRatingApprovalCreateResult(t *testing.T) {
 				{Value: `{"1":"yes","2":"abstain"}`},
 				{Value: `{"1":"yes","2":"no"}`},
 			},
-			expectResult: `{"1":{"yes":"1"},"2":{"no":"1"},"invalid":1}`,
+			expectResult: `{"1":{"yes":"1"},"2":{"no":"1"},"invalid":1,"total_ballots":2}`,
 		},
 		{
 			name:    "General abstain",
@@ -114,7 +114,7 @@ func TestRatingApprovalCreateResult(t *testing.T) {
 				{Value: `{"1":"yes","2":"no"}`},
 				{Value: `{}`},
 			},
-			expectResult: `{"1":{"yes":"1"},"2":{"no":"1"},"abstain":"1"}`,
+			expectResult: `{"1":{"yes":"1"},"2":{"no":"1"},"abstain":"1","total_ballots":2}`,
 		},
 		{
 			name: "General abstain but abstain not allowed",
@@ -126,7 +126,7 @@ func TestRatingApprovalCreateResult(t *testing.T) {
 				{Value: `{"1":"yes","2":"abstain"}`},
 				{Value: `{}`},
 			},
-			expectResult: `{"1":{"yes":"1"},"2":{"no":"1"},"abstain":"1","invalid":1}`,
+			expectResult: `{"1":{"yes":"1"},"2":{"no":"1"},"abstain":"1","invalid":1,"total_ballots":3}`,
 		},
 		{
 			name: "Not Voting does not count as abstain",
@@ -137,7 +137,7 @@ func TestRatingApprovalCreateResult(t *testing.T) {
 				{Value: `{"1":"yes","2":"abstain"}`},
 				{Value: `{"1":"yes"}`},
 			},
-			expectResult: `{"1":{"yes":"2"},"2":{"abstain":"1"}}`,
+			expectResult: `{"1":{"yes":"2"},"2":{"abstain":"1"},"total_ballots":2}`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
