@@ -359,6 +359,116 @@ func TestCreateSelection(t *testing.T) {
 	})
 }
 
+func TestUpdate(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("Postgres Test")
+	}
+
+	pg, err := pgtest.NewPostgresTest(t)
+	if err != nil {
+		t.Fatalf("Error starting postgres: %v", err)
+	}
+
+	data := `---
+	organization/1/enable_electronic_voting: true
+	user/5:
+		username: admin
+		organization_management_level: superadmin
+	group/40:
+		name: delegate
+		meeting_id: 1
+	motion/5:
+		meeting_id: 1
+		sequential_number: 1
+		title: my motion
+		state_id: 1
+	list_of_speakers/7:
+		content_object_id: motion/5
+		sequential_number: 1
+		meeting_id: 1
+	meeting/1/welcome_title: hello world
+
+	poll_config_approval/77:
+		allow_abstain: true
+		onehundred_percent_base: valid
+	poll/3:
+		title: my poll
+		config_id: poll_config_approval/77
+		visibility: open
+		sequential_number: 1
+		content_object_id: motion/5
+		meeting_id: 1
+		state: created
+		entitled_group_ids: [40]
+	`
+
+	withData(t, pg, data, func(service *vote.Vote, flow flow.Flow) {
+		t.Run("Update Title", func(t *testing.T) {
+			body := `{
+				"title": "updated title"
+			}`
+
+			if err := service.Update(t.Context(), 3, 5, strings.NewReader(body)); err != nil {
+				t.Fatalf("Error updating poll: %v", err)
+			}
+
+			poll, err := dsmodels.New(flow).Poll(3).First(t.Context())
+			if err != nil {
+				t.Fatalf("Error getting poll: %v", err)
+			}
+			if poll.Title != "updated title" {
+				t.Fatalf("Expected updated title, got %s", poll.Title)
+			}
+		})
+
+		t.Run("Update method", func(t *testing.T) {
+			body := `{
+				"method": "selection",
+				"method_config": {
+					"onehundred_percent_base": "valid"
+				}
+			}`
+
+			if err := service.Update(t.Context(), 3, 5, strings.NewReader(body)); err != nil {
+				t.Fatalf("Error updating poll: %v", err)
+			}
+
+			poll, err := dsmodels.New(flow).Poll(3).First(t.Context())
+			if err != nil {
+				t.Fatalf("Error getting poll: %v", err)
+			}
+			if !strings.HasPrefix(poll.ConfigID, "poll_config_selection") {
+				t.Fatalf("Expected method selection, got %s", poll.ConfigID)
+			}
+		})
+
+		t.Run("Update options", func(t *testing.T) {
+			body := `{
+				"option_type": "text",
+				"options": ["option1", "option2"]
+			}`
+
+			if err := service.Update(t.Context(), 3, 5, strings.NewReader(body)); err != nil {
+				t.Fatalf("Error updating poll: %v", err)
+			}
+
+			ds := dsmodels.New(flow)
+
+			q := ds.Poll(3)
+			q = q.Preload(q.OptionList())
+			poll, err := q.First(t.Context())
+			if err != nil {
+				t.Fatalf("Error getting poll: %v", err)
+			}
+			if len(poll.OptionList) != 2 {
+				t.Fatalf("Expected two options, got %d", len(poll.OptionList))
+			}
+		})
+	})
+}
+
 func TestManually(t *testing.T) {
 	t.Parallel()
 

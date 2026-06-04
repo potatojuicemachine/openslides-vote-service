@@ -46,7 +46,8 @@ The request expects a body with the fields to create the poll:
 
 `option_type` can either be `text` or `meeting_user`.
 
-The type of `options` depends on `option_type`. It is either a list of string (`text`) or a list of numbers (`meeting_user`)
+The type of `options` depends on `option_type`. It is either a list of string
+(`text`) or a list of numbers (`meeting_user`)
 
 
 ### Update a poll
@@ -57,13 +58,13 @@ The fields `content_object_id` and `meeting_id` can not be changed. You have to
 create a new poll to "update" them.
 
 The fields `method`, `method_config`, `option_type`, `options`, `visibility`,
-`entitled_group_ids`, `live_voting_enabled` and `allow_vote_sprit` can only be
+`entitled_group_ids`, `live_voting_enabled` and `allow_vote_split` can only be
 changed, before the poll has started. You can reset a poll to change this
 values.
 
 The `method_config` can only be changed at a whole. If it is set in an update
 request, it overwrites all config values. For `options`, it is the same. If it
-is set, all options are overwritten.
+is set, all options are overwritten. This will create new ids for each option.
 
 
 ### Delete a poll

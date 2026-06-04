@@ -113,7 +113,7 @@ func (v *Vote) Create(ctx context.Context, requestUserID int, r io.Reader) (int,
 	}
 	defer tx.Rollback(ctx)
 
-	configID, err := saveConfig(ctx, tx, ci.Method, ci.MethodConfig)
+	configID, err := method.SaveConfig(ctx, tx, ci.Method, ci.MethodConfig)
 	if err != nil {
 		return 0, fmt.Errorf("save poll config: %w", err)
 	}
@@ -178,37 +178,7 @@ func (v *Vote) Create(ctx context.Context, requestUserID int, r io.Reader) (int,
 	return newID, nil
 }
 
-func saveConfig(ctx context.Context, tx pgx.Tx, methodStr string, config json.RawMessage) (string, error) {
-	// TODO: Maybe remove this function here and only have method.SaveConfig
-	//
-	// deleteStatements := []string{
-	// 	`DELETE FROM poll_config_approval WHERE poll_id = $1`,
-	// 	`DELETE FROM poll_config_selection WHERE poll_id = $1`,
-	// 	`DELETE FROM poll_config_rating_score WHERE poll_id = $1`,
-	// 	`DELETE FROM poll_config_rating_approval WHERE poll_id = $1`,
-	// }
-	// for _, sql := range deleteStatements {
-	// 	if _, err := tx.Exec(ctx, sql, pollID); err != nil {
-	// 		return fmt.Errorf("remove old config entries for poll %d: %w", pollID, err)
-	// 	}
-	// }
-
-	configObjectID, err := method.SaveConfig(ctx, tx, methodStr, config)
-	if err != nil {
-		return "", fmt.Errorf("save config for method %s: %w", methodStr, err)
-	}
-
-	// sql := `UPDATE poll SET config_id = $2 WHERE id = $1`
-	// if _, err := tx.Exec(ctx, sql, pollID, configObjectID); err != nil {
-	// 	return fmt.Errorf("update config value of poll: %w", err)
-	// }
-
-	return configObjectID, nil
-}
-
 func saveOptions(ctx context.Context, tx pgx.Tx, pollID int, oType string, optionList []json.RawMessage) error {
-	// TODO: Update options on update. Would it be ok to delete and recreate
-	// this? This would create new ids.
 	for i, option := range optionList {
 		switch oType {
 		case "text":
@@ -360,19 +330,39 @@ func (v *Vote) Update(ctx context.Context, pollID int, requestUserID int, r io.R
 	}
 
 	if ui.Method != "" || ui.MethodConfig != nil {
-		method := pollMethod(poll)
-		if ui.Method != "" {
-			method = ui.Method
+		m, err := pollMethod(poll)
+		if err != nil {
+			return fmt.Errorf("getting poll method for poll %d: %w", poll.ID, err)
 		}
 
-		// TODO: Remove old config
-		newConfigID, err := saveConfig(ctx, tx, method, ui.MethodConfig)
+		if ui.Method != "" {
+			m = ui.Method
+		}
+
+		if err := method.DeleteConfig(ctx, tx, pollID, poll.ConfigID); err != nil {
+			return fmt.Errorf("delete old config: %w", err)
+		}
+
+		newConfigID, err := method.SaveConfig(ctx, tx, m, ui.MethodConfig)
 		if err != nil {
 			return fmt.Errorf("save poll config: %w", err)
 		}
 
-		// TODO: Update poll with new config id
-		_ = newConfigID
+		sql := `UPDATE poll_t SET config_id = $1 WHERE id = $2`
+		if _, err := tx.Exec(ctx, sql, newConfigID, pollID); err != nil {
+			return fmt.Errorf("update poll.config_id: %w", err)
+		}
+	}
+
+	if ui.OptionType != "" && len(ui.Options) > 0 {
+		sql := "DELETE FROM poll_option WHERE poll_id = $1"
+		if _, err := tx.Exec(ctx, sql, pollID); err != nil {
+			return fmt.Errorf("deleting existing poll options: %w", err)
+		}
+
+		if err := saveOptions(ctx, tx, pollID, ui.OptionType, ui.Options); err != nil {
+			return fmt.Errorf("save options: %w", err)
+		}
 	}
 
 	if len(ui.EntitledGroupIDs) > 0 {
@@ -411,6 +401,8 @@ type updateInput struct {
 	Title             string              `json:"title"`
 	Method            string              `json:"method"`
 	MethodConfig      json.RawMessage     `json:"method_config"`
+	OptionType        string              `json:"option_type"`
+	Options           []json.RawMessage   `json:"options"`
 	Visibility        string              `json:"visibility"`
 	EntitledGroupIDs  []int               `json:"entitled_group_ids"`
 	LiveVotingEnabled dsfetch.Maybe[bool] `json:"live_voting_enabled"`
@@ -442,6 +434,14 @@ func parseUpdateInput(r io.Reader, poll dsmodels.Poll, electronicVotingEnabled b
 
 		if ui.MethodConfig != nil {
 			return updateInput{}, MessageError(ErrNotAllowed, "config can only be changed before the poll has started")
+		}
+
+		if ui.OptionType != "" {
+			return updateInput{}, MessageError(ErrNotAllowed, "option type can only be changed before the poll has started")
+		}
+
+		if len(ui.Options) != 0 {
+			return updateInput{}, MessageErrorf(ErrInvalid, "options can only be changed before the poll has started")
 		}
 
 		if ui.Visibility != "" {
@@ -476,18 +476,6 @@ func (ui updateInput) query(pollID int) (string, []any) {
 	if ui.Title != "" {
 		setParts = append(setParts, fmt.Sprintf("title = $%d", argIndex))
 		args = append(args, ui.Title)
-		argIndex++
-	}
-
-	if ui.Method != "" {
-		setParts = append(setParts, fmt.Sprintf("method = $%d", argIndex))
-		args = append(args, ui.Method)
-		argIndex++
-	}
-
-	if ui.MethodConfig != nil {
-		setParts = append(setParts, fmt.Sprintf("config = $%d", argIndex))
-		args = append(args, string(ui.MethodConfig))
 		argIndex++
 	}
 
@@ -547,16 +535,16 @@ func (v *Vote) Delete(ctx context.Context, pollID int, requestUserID int) error 
 
 	deleteStatements := []string{
 		`DELETE FROM poll_ballot WHERE poll_id = $1`,
-		`DELETE FROM poll_config_approval WHERE poll_id = $1`,
-		`DELETE FROM poll_config_selection WHERE poll_id = $1`,
-		`DELETE FROM poll_config_rating_score WHERE poll_id = $1`,
-		`DELETE FROM poll_config_rating_approval WHERE poll_id = $1`,
 		`DELETE FROM poll_option WHERE poll_id = $1`,
 	}
 	for _, sql := range deleteStatements {
 		if _, err := tx.Exec(ctx, sql, pollID); err != nil {
 			return fmt.Errorf("remove old config entries for poll %d: %w", pollID, err)
 		}
+	}
+
+	if err := method.DeleteConfig(ctx, tx, pollID, poll.ConfigID); err != nil {
+		return fmt.Errorf("delete method: %w", err)
 	}
 
 	sql := `DELETE FROM poll WHERE id = $1;`
@@ -984,74 +972,24 @@ func (v *Vote) decryptBallot(encryptedBallot string) (string, error) {
 
 // resolveMethod returns the poll method for a poll.
 func (v *Vote) resolveMethod(ctx context.Context, poll dsmodels.Poll) (method.Method, error) {
-	configCollection, configIDStr, found := strings.Cut(poll.ConfigID, "/")
-	if !found {
-		return nil, fmt.Errorf("poll %d has an invalid config_id: %s", poll.ID, poll.ConfigID)
-	}
-
-	configID, err := strconv.Atoi(configIDStr)
+	method, err := method.ResolveMethod(ctx, v.flow, poll.ConfigID, poll.OptionIDs)
 	if err != nil {
-		return nil, fmt.Errorf("poll %d ha san invalid config_id. Second part is not a number: %s", poll.ID, poll.ConfigID)
+		return nil, fmt.Errorf("method.ResolveMethod: %w", err)
 	}
-
-	dsm := dsmodels.New(v.flow)
-
-	switch configCollection {
-	case "poll_config_approval":
-		configDB, err := dsm.PollConfigApproval(configID).First(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("fetching poll_config_approval: %w", err)
-		}
-
-		return method.ApprovalFromDB(configDB), nil
-
-	case "poll_config_selection":
-		configDB, err := dsm.PollConfigSelection(configID).First(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("fetching poll_config_selection: %w", err)
-		}
-
-		return method.SelectionFromDB(configDB, poll.OptionIDs), nil
-
-	case "poll_config_rating_score":
-		configDB, err := dsm.PollConfigRatingScore(configID).First(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("fetching poll_config_rating_score: %w", err)
-		}
-
-		return method.RatingScoreFromDB(configDB, poll.OptionIDs), nil
-
-	case "poll_config_rating_approval":
-		configDB, err := dsm.PollConfigRatingApproval(configID).First(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("fetching poll_config_rating_approval: %w", err)
-		}
-
-		return method.RatingApprovalFromDB(configDB, poll.OptionIDs), nil
-
-	default:
-		return nil, fmt.Errorf("poll %d has an unknown poll config: %s", poll.ID, poll.ConfigID)
-	}
+	return method, nil
 }
 
-func pollMethod(poll dsmodels.Poll) string {
+func pollMethod(poll dsmodels.Poll) (string, error) {
 	configCollection, _, found := strings.Cut(poll.ConfigID, "/")
 	if !found {
-		panic(fmt.Sprintf("poll %d has an invalid config_id: %s", poll.ID, poll.ConfigID))
+		return "", fmt.Errorf("poll %d has an invalid config_id: %s", poll.ID, poll.ConfigID)
 	}
 
-	switch configCollection {
-	case "poll_config_approval":
-		return "approval"
-	case "poll_config_selection":
-		return "selection"
-	case "poll_config_rating_score":
-		return "rating_score"
-	case "poll_config_rating_approval":
-		return "rating_approval"
-	default:
-		panic(fmt.Sprintf("poll %d has an unknown poll config: %s", poll.ID, poll.ConfigID))
+	m, found := strings.CutPrefix(configCollection, "poll_config_")
+	if !found {
+		return "", fmt.Errorf("poll %d has an unknown poll config: %s", poll.ID, poll.ConfigID)
 	}
+	return m, nil
 }
 
 // split split sa vote and valides the weight

@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/OpenSlides/openslides-go/datastore/dsfetch"
 	"github.com/OpenSlides/openslides-go/datastore/dsmodels"
+	"github.com/OpenSlides/openslides-go/datastore/flow"
 	"github.com/jackc/pgx/v5"
 	"github.com/shopspring/decimal"
 )
@@ -18,6 +21,58 @@ type Method interface {
 	ValidateBallot(ballot json.RawMessage) error
 	Result(votes []dsmodels.PollBallot) (string, error)
 	RequireOptions() bool
+}
+
+// ResolveMethod returns the method object for an poll.
+func ResolveMethod(ctx context.Context, getter flow.Getter, configStr string, optionIDs []int) (Method, error) {
+	configCollection, configIDStr, found := strings.Cut(configStr, "/")
+	if !found {
+		return nil, fmt.Errorf("invalid config_id: %s", configStr)
+	}
+
+	configID, err := strconv.Atoi(configIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid config_id. Second part is not a number: %s", configStr)
+	}
+
+	dsm := dsmodels.New(getter)
+
+	switch configCollection {
+	case "poll_config_approval":
+		configDB, err := dsm.PollConfigApproval(configID).First(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("fetching poll_config_approval: %w", err)
+		}
+
+		return ApprovalFromDB(configDB), nil
+
+	case "poll_config_selection":
+		configDB, err := dsm.PollConfigSelection(configID).First(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("fetching poll_config_selection: %w", err)
+		}
+
+		return SelectionFromDB(configDB, optionIDs), nil
+
+	case "poll_config_rating_score":
+		configDB, err := dsm.PollConfigRatingScore(configID).First(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("fetching poll_config_rating_score: %w", err)
+		}
+
+		return RatingScoreFromDB(configDB, optionIDs), nil
+
+	case "poll_config_rating_approval":
+		configDB, err := dsm.PollConfigRatingApproval(configID).First(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("fetching poll_config_rating_approval: %w", err)
+		}
+
+		return RatingApprovalFromDB(configDB, optionIDs), nil
+
+	default:
+		return nil, fmt.Errorf("unknown poll config: %s", configStr)
+	}
 }
 
 // SaveConfig saves the configuration for a given vote method.
@@ -34,6 +89,38 @@ func SaveConfig(ctx context.Context, tx pgx.Tx, method string, config json.RawMe
 	default:
 		return "", fmt.Errorf("unknown method: %s", method)
 	}
+}
+
+// DeleteConfig deletes the configuration for a given vote method.
+func DeleteConfig(ctx context.Context, tx pgx.Tx, pollID int, configID string) error {
+	parts := strings.SplitN(configID, "/", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid config_id: %s", configID)
+	}
+	configType, configIDStr := parts[0], parts[1]
+
+	var configTable string
+	switch configType {
+	case "poll_config_approval":
+		configTable = "poll_config_approval_t"
+	case "poll_config_selection":
+		configTable = "poll_config_selection_t"
+	case "poll_config_rating_score":
+		configTable = "poll_config_rating_score_t"
+	case "poll_config_rating_approval":
+		configTable = "poll_config_rating_approval_t"
+	default:
+		return fmt.Errorf("unknown config type: %s", configType)
+	}
+
+	if _, err := tx.Exec(ctx,
+		fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, configTable),
+		configIDStr,
+	); err != nil {
+		return fmt.Errorf("delete table %s from postgres: %w", configTable, err)
+	}
+
+	return nil
 }
 
 func RequireOptions(methodStr string) (bool, error) {
