@@ -261,7 +261,7 @@ func parseCreateInput(r io.Reader, electronicVotingEnabled bool) (createInput, e
 	}
 
 	if ci.MethodConfig == nil {
-		return createInput{}, MessageError(ErrInvalid, "Field 'config' can not be empty")
+		return createInput{}, MessageError(ErrInvalid, "Field 'method_config' can not be empty")
 	}
 
 	if ci.OptionType == "" && len(ci.Options) != 0 {
