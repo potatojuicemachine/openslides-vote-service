@@ -765,6 +765,9 @@ func validate(poll dsmodels.Poll, v ballotValue) string {
 		if poll.MaxVotesAmount == 0 {
 			poll.MaxVotesAmount = len(poll.OptionIDs)
 		}
+		if poll.MaxYesVotesAmount == 0 {
+			poll.MaxYesVotesAmount = len(poll.OptionIDs)
+		}
 		switch v.Type() {
 		case ballotValueString:
 			// The user answered with Y, N or A (or another invalid string).
@@ -788,6 +791,12 @@ func validate(poll dsmodels.Poll, v ballotValue) string {
 					return fmt.Sprintf("Data for option %d does not fit the poll method.", optionID)
 				}
 			}
+
+			var yes_votes = countYesVotes(v)
+			if yes_votes > poll.MaxYesVotesAmount {
+				return fmt.Sprintf("The amount of yes votes must not exceed %d", poll.MaxYesVotesAmount)
+			}
+
 			return voteIsValid
 
 		default:
@@ -869,4 +878,15 @@ func equalElement(g1, g2 []int) bool {
 		}
 	}
 	return false
+}
+
+// counts the amount of yes votes in a ballot
+func countYesVotes(vote ballotValue) int {
+	var amount int
+	for _, yna := range vote.optionYNA {
+		if yna == "Y" {
+			amount++
+		}
+	}
+	return amount
 }
