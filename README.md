@@ -1,7 +1,7 @@
 # OpenSlides Vote Service
 
 The Vote Service is part of the OpenSlides environments. It is responsible for
-the `poll`, `poll_config_X`, `poll_config_option` and `ballot` collections. It
+the `poll`, `poll_config_X`, `poll_option` and `poll_ballot` collections. It
 handles the electronic voting.
 
 The service has no internal state but uses the normal postgres database to save
@@ -16,9 +16,9 @@ With the exception of the vote request, all requests can only be sent by a
 manager. The permission depends on the field `content_object_id` of the
 corresponding poll.
 
-- motions: `motion.can_manage`
-- assignments: `assignment.can_manage`
-- topic: `poll.can_manage`
+- motions: `motion.can_manage_polls`
+- assignments: `assignment.can_manage_polls`
+- topic: `agenda_item.can_manage_polls`
 
 
 ### Create a poll
@@ -90,7 +90,7 @@ creates the `poll/result` field.
 
 The request has two optional attributes: `publish` and `anonymize`. `publish`
 sets the field `poll/state` to `published`. `anonymize` removes all user ids
-from the corresponding `ballot` objects.
+from the corresponding `poll_ballot` objects.
 
 The request can be send many times. It only creates the result the first time.
 `publish` and `anonymize` can be used on a later request.
@@ -105,7 +105,7 @@ request can be used:
 
 `POST /system/vote/poll/{id}/reset`
 
-Reset sets the state back to `created` and removes all `ballot` objects.
+Reset sets the state back to `created` and removes all `poll_ballot` objects.
 
 
 ### Send a ballot
@@ -116,7 +116,7 @@ A vote-request is a post request with the ballot as body. Only logged in users
 can vote. The body has to be valid json.
 
 The service distinguishes between two users on each vote-request. The acting
-user is the request user, that sends the vote-request. The represented user is
+user is the request user that sends the vote-request. The represented user is
 the user, for whom the ballot is sent. Both users can be the same.
 
 The acting user has to be present in the meeting and needs the permission to
@@ -175,7 +175,7 @@ have two different meanings. In future versions, there will probably be
 different features for this two modes.
 
 The value `named` means that the mapping between votes and users is not deleted
-at the end. In a political context, a 'named' poll also means that eligible
+at the end. In a political context, a `named` poll also means that eligible
 voters are called individually, publicly, and one after another, and asked for
 their vote. In the future, a feature could be considered where, for
 `named`-polls, users cannot vote themselves, but instead the manager is guided
@@ -191,8 +191,8 @@ handler.
 
 At the moment, a `secret`-poll is identical to an `open`- or `named`-poll. But
 is handled differently in the autoupdate-service. The field
-`ballot/acting_user_id` and `ballot/represented_user_id` get restricted for
-everybody.
+`poll_ballot/acting_user_id` and `poll_ballot/represented_user_id` get
+restricted for everybody.
 
 In the future, these values will be used for crypto votes. See the entry in the
 [wiki](https://github.com/OpenSlides/OpenSlides/wiki/DE%3AKonzept-geheime-Wahlen-mit-OpenSlides)
@@ -200,8 +200,8 @@ In the future, these values will be used for crypto votes. See the entry in the
 
 ## Poll methods
 
-The values of `method_config`in the poll-create-request, `ballot/value` and
-`poll/result` depend on the field poll method.
+The values of `method_config` in the poll-create-request, `poll_ballot/value`
+and `poll/result` depend on value in field `method` in the poll create request.
 
 The method of a poll can be calculated by looking at the collection-part of the
 generic-relation-field `poll.config_id`.
@@ -209,7 +209,7 @@ generic-relation-field `poll.config_id`.
 
 ### approval
 
-On an approval poll, the users can vote with `yes`, `no` or `abstain`. This is
+In an approval poll, the users can vote with `yes`, `no` or `abstain`. This is
 the usual method to vote on a motion.
 
 
@@ -218,12 +218,12 @@ the usual method to vote on a motion.
 `allow_abstain`: if set to `true`, users are allowed to vote with `abstain`. The
 default is `true`.
 
-`onehundred_percent_base`: Value, that explains, how the 100 % of the poll
-result should be calculated. This value is not needed to calculate the absolue
+`onehundred_percent_base`: Value that explains, how the 100 % of the poll
+result should be calculated. This value is not needed to calculate the absolute
 result, but only to present the relative result in percent.
 
 
-#### ballot/value
+#### poll_ballot/value
 
 Valid ballots look like: `{"value":"yes"}`, `{"value":"no"}` or
 `{"value":"abstain"}`.
@@ -261,16 +261,16 @@ default is no limit.
 The default is `false`.
 
 `onehundred_percent_base`: Value, that explains, how the 100 % of the poll
-result should be calculated. This value is not needed to calculate the absolue
+result should be calculated. This value is not needed to calculate the absolute
 result, but only to present the relative result in percent.
 
 `strike_out`: boolean value. If set, the selected options are interpreted
-negativly and the result is presented accordingly.
+negatively and the result is presented accordingly.
 
 `display_chart`: string value. Tells the client, how to display the poll.
 
 
-#### ballot/value
+#### poll_ballot/value
 
 A ballot is a list of option ids. For example: `{"value":[1]}`.
 
@@ -323,11 +323,11 @@ options. The default is no limit.
 options. The default is no limit.
 
 `onehundred_percent_base`: Value, that explains, how the 100 % of the poll
-result should be calculated. This value is not needed to calculate the absolue
+result should be calculated. This value is not needed to calculate the absolute
 result, but only to present the relative result in percent.
 
 
-#### ballot/value
+#### poll_ballot/value
 
 A ballot is an object/dictionary from the `option_id` as string to the numeric
 score. For example: `{"value":{"1":3, "2":1}}`.
@@ -355,11 +355,11 @@ can give a value like `"Yes"`, `"No"` or `"Abstain"`.
 `allow_abstain`: The same as for `approval`.
 
 `onehundred_percent_base`: Value, that explains, how the 100 % of the poll
-result should be calculated. This value is not needed to calculate the absolue
+result should be calculated. This value is not needed to calculate the absolute
 result, but only to present the relative result in percent.
 
 
-#### ballot/value
+#### poll_ballot/value
 
 A ballot value looks like a combination between `rating_score` and `approval`:
 `{"value":{"1":"yes","2":"abstain"}}`.
@@ -372,9 +372,9 @@ A `rating_approval` result looks like:
 
 This means, that for the option with id `1`, there where 5 ballots with `Yes`,
 one ballot with `No` and no `abstain`. For the option with id `2`, there where
-one `Yes`, 6 `Abstain` and no `No`. There where one invalid ballots.
+one `Yes`, 6 `Abstain` and no `No`. There was one invalid ballot.
 
-A ballot is invalid, if one of its values is invalid. For example a ballot like
+A ballot is invalid if one of its values is invalid. For example a ballot like
 `{"value":{"1":"yes","2":"INVALID-VALUE"}}` is counted as invalid for both
 candidates.
 
@@ -400,7 +400,7 @@ changed for each user. Each user has a default vote weight
 (`user/default_vote_weight`), that can be changed for each meeting
 (`meeting_user/vote_weight`).
 
-This weight is saved (`ballot/weight`) and taken into account when generating
+This weight is saved (`poll_ballot/weight`) and taken into account when generating
 the result.
 
 The weight is not a floating number, but a decimal number. JSON can not
@@ -424,8 +424,8 @@ The attribute `split` says, that vote-split is activated for that ballot, then,
 the `value` attribute is an object/dictionary, where the keys are decimals and the
 values the normal ballot values.
 
-To be valid, each ballot-part has to be valid. If one part is invalid, the hole
-ballot is treated as invalid.
+To be valid, each ballot-part has to be valid. If one part is invalid, the
+whole ballot is treated as invalid.
 
 Vote split is not possible for secret polls.
 
