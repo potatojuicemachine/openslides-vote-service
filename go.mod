@@ -3,7 +3,7 @@ module github.com/OpenSlides/openslides-vote-service
 go 1.26.0
 
 require (
-	github.com/OpenSlides/openslides-go v0.0.0-20260520154826-117a72a06e70
+	github.com/OpenSlides/openslides-go v0.0.0-20260611111313-c32c5b93bec3
 	github.com/alecthomas/kong v1.14.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/shopspring/decimal v1.4.0
@@ -43,6 +43,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 )

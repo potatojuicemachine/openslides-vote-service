@@ -21,6 +21,7 @@ import (
 	"github.com/OpenSlides/openslides-go/datastore/dsmodels"
 	"github.com/OpenSlides/openslides-go/datastore/flow"
 	"github.com/OpenSlides/openslides-go/environment"
+	"github.com/OpenSlides/openslides-go/history"
 	"github.com/OpenSlides/openslides-go/perm"
 	"github.com/OpenSlides/openslides-vote-service/vote/method"
 	"github.com/jackc/pgx/v5"
@@ -169,6 +170,10 @@ func (v *Vote) Create(ctx context.Context, requestUserID int, r io.Reader) (int,
 		if _, err := tx.Exec(ctx, groupSQL, args...); err != nil {
 			return 0, fmt.Errorf("insert group-poll relations: %w", err)
 		}
+	}
+
+	if err := history.OneEntry(ctx, tx, requestUserID, fmt.Sprintf("poll/%d", newID), ci.MeetingID, "created"); err != nil {
+		return 0, fmt.Errorf("write history: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -390,6 +395,10 @@ func (v *Vote) Update(ctx context.Context, pollID int, requestUserID int, r io.R
 		}
 	}
 
+	if err := history.OneEntry(ctx, tx, requestUserID, fmt.Sprintf("poll/%d", pollID), poll.MeetingID, "updated"); err != nil {
+		return fmt.Errorf("write history: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
@@ -552,6 +561,16 @@ func (v *Vote) Delete(ctx context.Context, pollID int, requestUserID int) error 
 		return fmt.Errorf("delete poll: %w", err)
 	}
 
+	if err := history.OneEntry(ctx, tx, requestUserID, fmt.Sprintf("poll/%d", pollID), poll.MeetingID, "deleted"); err != nil {
+		return fmt.Errorf("write history: %w", err)
+	}
+
+	// Can be removed after https://github.com/OpenSlides/openslides-meta/issues/220
+	sql = `UPDATE history_entry_t set model_id=NULL WHERE model_id = $1;`
+	if _, err := tx.Exec(ctx, sql, fmt.Sprintf("poll/%d", pollID)); err != nil {
+		return fmt.Errorf("update old history entries: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
@@ -578,14 +597,29 @@ func (v *Vote) Start(ctx context.Context, pollID int, requestUserID int) error {
 		return fmt.Errorf("preloading poll: %w", err)
 	}
 
+	tx, err := v.querier.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Set published, if live voting is enabled.
 	sql := `UPDATE poll SET state = 'started', published = $2 WHERE id = $1 AND state != 'finished';`
-	commandTag, err := v.querier.Exec(ctx, sql, pollID, poll.LiveVotingEnabled)
+	commandTag, err := tx.Exec(ctx, sql, pollID, poll.LiveVotingEnabled)
 	if err != nil {
 		return fmt.Errorf("set poll %d to started: %w", pollID, err)
 	}
 
 	if commandTag.RowsAffected() != 1 {
 		return fmt.Errorf("poll %d not found or not in 'created' state", pollID)
+	}
+
+	if err := history.OneEntry(ctx, tx, requestUserID, fmt.Sprintf("poll/%d", pollID), poll.MeetingID, "started"); err != nil {
+		return fmt.Errorf("write history: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
@@ -617,7 +651,11 @@ func (v *Vote) Finalize(ctx context.Context, pollID int, requestUserID int, publ
 	}
 	defer tx.Rollback(ctx)
 
+	historyMessages := make([]string, 0, 4)
+	historyMessages = append(historyMessages, "finalized")
+
 	if poll.State == `started` {
+		historyMessages = append(historyMessages, "stopped")
 		ds := dsmodels.New(v.flow)
 
 		ballots, err := ds.PollBallot(poll.BallotIDs...).Get(ctx)
@@ -712,7 +750,12 @@ func (v *Vote) Finalize(ctx context.Context, pollID int, requestUserID int, publ
 		return fmt.Errorf("set poll %d to finished and publish to %v: %w", pollID, publish, err)
 	}
 
+	if publish && !poll.Published {
+		historyMessages = append(historyMessages, "published")
+	}
+
 	if anonymize {
+		historyMessages = append(historyMessages, "anonymized")
 		if poll.Visibility == "named" {
 			return MessageError(ErrNotAllowed, "A named-poll can not be anonymized.")
 		}
@@ -732,6 +775,10 @@ func (v *Vote) Finalize(ctx context.Context, pollID int, requestUserID int, publ
 		if _, err := tx.Exec(ctx, sqlPoll, pollID); err != nil {
 			return fmt.Errorf("set anonymize on poll: %w", err)
 		}
+	}
+
+	if err := history.OneEntry(ctx, tx, requestUserID, fmt.Sprintf("poll/%d", pollID), poll.MeetingID, historyMessages...); err != nil {
+		return fmt.Errorf("write history: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -786,6 +833,10 @@ func (v *Vote) Reset(ctx context.Context, pollID int, requestUserID int) error {
 	deleteVotedQuery := `DELETE FROM nm_meeting_user_poll_voted_ids_poll_t WHERE poll_id = $1`
 	if _, err := tx.Exec(ctx, deleteVotedQuery, pollID); err != nil {
 		return fmt.Errorf("delete poll votes: %w", err)
+	}
+
+	if err := history.OneEntry(ctx, tx, requestUserID, fmt.Sprintf("poll/%d", pollID), poll.MeetingID, "reset"); err != nil {
+		return fmt.Errorf("write history: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
