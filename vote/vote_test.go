@@ -327,8 +327,9 @@ func TestCreateSelection(t *testing.T) {
 			t.Fatalf("Error creating poll: %v", err)
 		}
 
-		if id != 1 {
-			t.Errorf("Expected id 1, got %d", id)
+		expect := [][]byte{[]byte(`"polldata1"`), []byte(`"polldata2"`)}
+		if !reflect.DeepEqual(result.Votes, expect) {
+			t.Errorf("Got:\n`%s`, expected\n`%s`", result.Votes, expect)
 		}
 
 		poll, err := dsmodels.New(flow).Poll(1).First(ctx)
