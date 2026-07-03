@@ -46,6 +46,13 @@ func TestRatingApprovalValidateVote(t *testing.T) {
 			vote:        `{"1":"Yes", "2":"invalid"}`,
 			expectValid: false,
 		},
+		{
+			name:        "To many yes votes",
+			config:      `{"max_yes_amount":1}`,
+			options:     []int{1, 2},
+			vote:        `{"1":"Yes", "2":"Yes"}`,
+			expectValid: false,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			a, err := method.RatingApprovalFromRequest([]byte(tt.config))

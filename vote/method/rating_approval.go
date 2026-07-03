@@ -18,6 +18,7 @@ type RatingApproval struct {
 	Options          []int              `json:"options"`
 	MaxOptionsAmount dsfetch.Maybe[int] `json:"max_options_amount"`
 	MinOptionsAmount dsfetch.Maybe[int] `json:"min_options_amount"`
+	MaxYesAmount     dsfetch.Maybe[int] `json:"max_yes_amount"`
 	AllowAbstain     bool               `json:"allow_abstain"`
 }
 
@@ -30,6 +31,7 @@ func RatingApprovalFromDB(configDB dsmodels.PollConfigRatingApproval, optionIDs 
 		Options:          optionIDs,
 		MaxOptionsAmount: maybeZeroIsNull(configDB.MaxOptionsAmount),
 		MinOptionsAmount: maybeZeroIsNull(configDB.MinOptionsAmount),
+		MaxYesAmount:     maybeZeroIsNull(configDB.MaxYesAmount),
 		AllowAbstain:     configDB.AllowAbstain,
 	}
 }
@@ -38,6 +40,7 @@ func RatingApprovalFromRequest(config json.RawMessage) (*RatingApproval, error) 
 	var cfg struct {
 		MaxOptionsAmount dsfetch.Maybe[int]  `json:"max_options_amount"`
 		MinOptionsAmount dsfetch.Maybe[int]  `json:"min_options_amount"`
+		MaxYesAmount     dsfetch.Maybe[int]  `json:"max_yes_amount"`
 		AllowAbstain     dsfetch.Maybe[bool] `json:"allow_abstain"`
 	}
 	if err := json.Unmarshal(config, &cfg); err != nil {
@@ -58,6 +61,7 @@ func RatingApprovalFromRequest(config json.RawMessage) (*RatingApproval, error) 
 	return &RatingApproval{
 		MaxOptionsAmount: cfg.MaxOptionsAmount,
 		MinOptionsAmount: cfg.MinOptionsAmount,
+		MaxYesAmount:     cfg.MaxYesAmount,
 		AllowAbstain:     allowAbstain,
 	}, nil
 }
@@ -85,14 +89,15 @@ func ratingApprovalSaveConfig(ctx context.Context, tx pgx.Tx, config json.RawMes
 
 	var configID int
 	sql := `INSERT INTO poll_config_rating_approval
-	(max_options_amount, min_options_amount, allow_abstain, onehundred_percent_base)
-	VALUES ($1, $2, $3, $4)
+	(max_options_amount, min_options_amount, max_yes_amount, allow_abstain, onehundred_percent_base)
+	VALUES ($1, $2, $3, $4, $5)
 	RETURNING id;`
 	if err := tx.QueryRow(
 		ctx,
 		sql,
 		maybeNullIsNil(ra.MaxOptionsAmount),
 		maybeNullIsNil(ra.MinOptionsAmount),
+		maybeNullIsNil(ra.MaxYesAmount),
 		ra.AllowAbstain,
 		cfg.OneHundredPercentBase,
 	).Scan(&configID); err != nil {
@@ -116,6 +121,9 @@ func (ra RatingApproval) ValidateBallot(vote json.RawMessage) error {
 		return invalidVote("too few options")
 	}
 
+	maxYesAmount, maxYesSet := ra.MaxYesAmount.Value()
+
+	var countYes int
 	for option, choice := range choice {
 		if !slices.Contains(ra.Options, option) {
 			return invalidVote("unknown option id %d", option)
@@ -125,6 +133,14 @@ func (ra RatingApproval) ValidateBallot(vote json.RawMessage) error {
 		if err := approval.ValidateBallot(choice); err != nil {
 			return fmt.Errorf("validating option id %d: %w", option, err)
 		}
+
+		if maxYesSet && strings.ToLower(string(choice)) == `"yes"` {
+			countYes += 1
+		}
+	}
+
+	if maxYesSet && countYes > maxYesAmount {
+		return invalidVote("to many yes votes. Got %d votes, only %d allowed.", maxYesAmount, maxYesAmount)
 	}
 
 	return nil
