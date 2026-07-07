@@ -503,20 +503,26 @@ It's a dictionary where each key-value pair represents an old `vote`:
   * meeting/poll_candidate_ids
   * meeting/option_ids
   * meeting/vote_ids
+  * meeting/assignment_poll_ballot_paper_selection
+  * meeting/assignment_poll_ballot_paper_number
+  * meeting/motion_poll_ballot_paper_selection
+  * meeting/motion_poll_ballot_paper_number
+  * meeting/poll_ballot_paper_selection
+  * meeting/poll_ballot_paper_number
 * Fields that were renamed:
   * meeting/motion_poll_projection_name_order_first -> poll_projection_name_order_first
   * meeting/motion_poll_projection_max_columns -> poll_projection_max_columns
   * meeting/assignment_poll_enable_max_votes_per_option -> poll_enable_max_votes_per_option
+  * meeting/default_projector_poll_ids -> default_projector_topic_poll_ids
 * Fields that need to be moved to meeting_poll_default:
-  * meeting/*_poll_group_ids -> meeting_poll_default/group_ids
-  * meeting/*_poll_ballot_paper_selection -> meeting_poll_default/ballot_paper_selection
-  * meeting/*_poll_ballot_paper_number -> meeting_poll_default/ballot_paper_number
-  * meeting/*_poll_sort_result_by_votes -> meeting_poll_default/sort_result_by_votes
-* Fields should be renamed and values should be changed similarly to poll/type:
+  * meeting/*_poll_default_group_ids -> meeting_poll_default/group_ids
+  * meeting/*_poll_sort_poll_result_by_votes -> meeting_poll_default/sort_result_by_votes
+* Field should be renamed and moved to meeting_poll_default, values should be changed similarly to poll/type:
   * meeting/*_poll_default_type -> meeting_poll_default/visibility
-* Values should be changed similarly to poll/onehundred_percent_base:
+* Field should be moved to meeting_poll_default and values should be changed similarly to poll/onehundred_percent_base:
   * meeting/*_poll_default_onehundred_percent_base -> meeting_poll_default/onehundred_percent_base
-* Topic meeting_poll_default/display_chart: pie
+* For topic polls:
+  * meeting_poll_default/display_chart: pie
 * meeting/assignment_poll_default_method
   * Y
     *  meeting_poll_default/method -> selection
